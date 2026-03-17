@@ -1,0 +1,28 @@
+# Local codemem state
+.codemem/
+.codemem-home/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Build and release artifacts
+build/
+dist/
+*.egg-info/
+
+# Coverage and local tooling
+.coverage
+htmlcov/
+.python-version
+
+# OS/editor noise
+.DS_Store
