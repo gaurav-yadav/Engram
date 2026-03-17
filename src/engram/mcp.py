@@ -178,31 +178,43 @@ TOOLS: dict[str, tuple[ToolHandler, dict[str, Any]]] = {
 
 
 def _read_message() -> dict[str, Any] | None:
-    headers: dict[str, str] = {}
     while True:
         line = sys.stdin.buffer.readline()
         if not line:
             return None
-        if line in (b"\r\n", b"\n"):
-            break
-        header = line.decode("utf-8").strip()
-        if ":" not in header:
+        text = line.decode("utf-8").strip()
+        if not text:
             continue
-        name, value = header.split(":", 1)
-        headers[name.strip().lower()] = value.strip()
-    length = headers.get("content-length")
-    if not length:
-        return None
-    body = sys.stdin.buffer.read(int(length))
-    if not body:
-        return None
-    return json.loads(body.decode("utf-8"))
+        if text.startswith("{"):
+            return json.loads(text)
+        # Content-Length framing: skip headers until blank line, then read body
+        headers: dict[str, str] = {}
+        if ":" in text:
+            name, value = text.split(":", 1)
+            headers[name.strip().lower()] = value.strip()
+        while True:
+            header_line = sys.stdin.buffer.readline()
+            if not header_line:
+                return None
+            if header_line.strip() == b"":
+                break
+            decoded = header_line.decode("utf-8").strip()
+            if ":" in decoded:
+                name, value = decoded.split(":", 1)
+                headers[name.strip().lower()] = value.strip()
+        length = headers.get("content-length")
+        if not length:
+            continue
+        body = sys.stdin.buffer.read(int(length))
+        if not body:
+            return None
+        return json.loads(body.decode("utf-8"))
 
 
 def _write_message(payload: dict[str, Any]) -> None:
     body = json.dumps(payload).encode("utf-8")
-    sys.stdout.buffer.write(f"Content-Length: {len(body)}\r\n\r\n".encode("utf-8"))
     sys.stdout.buffer.write(body)
+    sys.stdout.buffer.write(b"\n")
     sys.stdout.buffer.flush()
 
 
@@ -236,11 +248,12 @@ def run_stdio_server() -> None:
         message_id = message.get("id")
 
         if method == "initialize":
+            client_version = (message.get("params") or {}).get("protocolVersion", "2024-11-05")
             _write_message(
                 _success(
                     message_id,
                     {
-                        "protocolVersion": "2024-11-05",
+                        "protocolVersion": client_version,
                         "capabilities": {"tools": {}},
                         "serverInfo": {"name": "engram", "version": __version__},
                     },

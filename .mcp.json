@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "engram": {
+      "command": "python3",
+      "args": ["-u", "-m", "engram", "mcp"],
+      "env": {
+        "PYTHONPATH": "/Users/gauravyadav/exp/agent-memory/src"
+      }
+    }
+  }
+}
