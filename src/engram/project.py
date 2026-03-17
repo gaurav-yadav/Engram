@@ -3,13 +3,13 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from codemem import config
-from codemem.claude import import_claude_history
-from codemem.db import Database
-from codemem.models import DetectedDoc, ImportResult, InitResult
-from codemem.repoindex import ensure_repo_layout, hash_text, scan_global_rules, scan_repo
-from codemem.rules import scope_priority
-from codemem.summary import write_summaries
+from engram import config
+from engram.claude import import_claude_history
+from engram.db import Database
+from engram.models import DetectedDoc, ImportResult, InitResult
+from engram.repoindex import ensure_repo_layout, hash_text, scan_global_rules, scan_repo
+from engram.rules import scope_priority
+from engram.summary import write_summaries
 
 
 def _scope_key_for_repo(repo_root: Path, doc: DetectedDoc) -> str:

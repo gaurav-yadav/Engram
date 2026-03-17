@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from codemem.models import DetectedDoc, ImportResult
+from engram.models import DetectedDoc, ImportResult
 
 
 def write_summaries(
@@ -12,13 +12,13 @@ def write_summaries(
     import_result: ImportResult,
     project_stats: dict[str, int] | None = None,
 ) -> list[Path]:
-    summaries_dir = repo_root / ".codemem" / "summaries"
+    summaries_dir = repo_root / ".engram" / "summaries"
     summaries_dir.mkdir(parents=True, exist_ok=True)
 
     project_summary = summaries_dir / "project-summary.md"
     commands_summary = summaries_dir / "commands.md"
     preferences_summary = summaries_dir / "preferences.md"
-    imports_manifest = repo_root / ".codemem" / "imports" / "claude-seed-manifest.json"
+    imports_manifest = repo_root / ".engram" / "imports" / "claude-seed-manifest.json"
     imports_manifest.parent.mkdir(parents=True, exist_ok=True)
 
     discovered: list[str] = []

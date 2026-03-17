@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from codemem.claude import parse_session_file
+from engram.claude import parse_session_file
 
 
 class ClaudeImportTests(unittest.TestCase):

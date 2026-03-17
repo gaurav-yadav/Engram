@@ -1,6 +1,6 @@
-# Local codemem state
-.codemem/
-.codemem-home/
+# Local engram state
+.engram/
+.engram-home/
 
 # Python bytecode and caches
 __pycache__/

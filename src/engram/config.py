@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 
-APP_DIR_NAME = ".codemem"
+APP_DIR_NAME = ".engram"
 
 
 def home_dir() -> Path:
@@ -12,7 +12,7 @@ def home_dir() -> Path:
 
 
 def global_state_dir() -> Path:
-    override = os.environ.get("CODEMEM_HOME")
+    override = os.environ.get("ENGRAM_HOME")
     if override:
         return Path(override).expanduser().resolve()
     return home_dir() / APP_DIR_NAME
@@ -23,7 +23,7 @@ def global_config_path() -> Path:
 
 
 def db_path() -> Path:
-    return global_state_dir() / "codemem.db"
+    return global_state_dir() / "engram.db"
 
 
 def global_rules_dir() -> Path:

@@ -3,14 +3,14 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from codemem import config
-from codemem.models import DoctorCheck
+from engram import config
+from engram.models import DoctorCheck
 
 
 def _is_writable_dir(path: Path) -> bool:
     try:
         path.mkdir(parents=True, exist_ok=True)
-        probe = path / ".codemem_write_test"
+        probe = path / ".engram_write_test"
         probe.write_text("ok", encoding="utf-8")
         probe.unlink()
     except OSError:

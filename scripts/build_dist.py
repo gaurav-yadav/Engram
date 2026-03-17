@@ -13,7 +13,7 @@ DIST = ROOT / "dist"
 
 
 def _version() -> str:
-    init_path = SRC / "codemem" / "__init__.py"
+    init_path = SRC / "engram" / "__init__.py"
     for line in init_path.read_text(encoding="utf-8").splitlines():
         if line.startswith("__version__ = "):
             return line.split("=", 1)[1].strip().strip('"').strip("'")
@@ -30,13 +30,13 @@ def _sha256(path: Path) -> str:
 
 def build_zipapp(version: str) -> Path:
     DIST.mkdir(parents=True, exist_ok=True)
-    output = DIST / f"codemem-{version}.pyz"
+    output = DIST / f"engram-{version}.pyz"
     if output.exists():
         output.unlink()
     zipapp.create_archive(
         source=str(SRC),
         target=str(output),
-        main="codemem.cli:main",
+        main="engram.cli:main",
         interpreter="/usr/bin/env python3",
         compressed=True,
     )
@@ -46,16 +46,16 @@ def build_zipapp(version: str) -> Path:
 
 def build_source_archive(version: str) -> Path:
     DIST.mkdir(parents=True, exist_ok=True)
-    output = DIST / f"codemem-{version}.tar.gz"
+    output = DIST / f"engram-{version}.tar.gz"
     if output.exists():
         output.unlink()
     with tarfile.open(output, "w:gz") as archive:
         for relative in ("README.md", "pyproject.toml"):
-            archive.add(ROOT / relative, arcname=f"codemem-{version}/{relative}")
+            archive.add(ROOT / relative, arcname=f"engram-{version}/{relative}")
         for directory in ("src", "tests", "scripts", ".github"):
             path = ROOT / directory
             if path.exists():
-                archive.add(path, arcname=f"codemem-{version}/{directory}")
+                archive.add(path, arcname=f"engram-{version}/{directory}")
     return output
 
 
@@ -67,7 +67,7 @@ def write_checksums(paths: list[Path]) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build codemem release artifacts")
+    parser = argparse.ArgumentParser(description="Build engram release artifacts")
     parser.parse_args(argv)
 
     version = _version()

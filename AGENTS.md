@@ -2,15 +2,15 @@
 
 ## Project Structure & Module Organization
 
-Core application code lives in `src/codemem/`. Key modules are `cli.py` for commands, `mcp.py` for the stdio server, `db.py` for SQLite schema and queries, `claude.py` for chat import, and `query.py` for retrieval assembly. Tests live in `tests/` and mirror the runtime modules with `test_*.py` files. Release and install helpers live in `scripts/`, CI lives in `.github/workflows/`, and longer publishing notes live in `docs/`. Do not commit local runtime state from `.codemem/`, `.codemem-home/`, or built artifacts in `dist/`.
+The repository and runtime package are both named `Engram`. Core application code lives in `src/engram/`. Key modules are `cli.py` for commands, `mcp.py` for the stdio server, `db.py` for SQLite schema and queries, `claude.py` for chat import, and `query.py` for retrieval assembly. Tests live in `tests/` and mirror the runtime modules with `test_*.py` files. Release and install helpers live in `scripts/`, CI lives in `.github/workflows/`, and longer publishing notes live in `docs/`. Do not commit local runtime state from `.engram/`, `.engram-home/`, or built artifacts in `dist/`.
 
 ## Build, Test, and Development Commands
 
 Run commands from the repo root:
 
 ```bash
-PYTHONPATH=src python3 -m codemem doctor
-PYTHONPATH=src python3 -m codemem init /path/to/repo --seed-claude
+PYTHONPATH=src python3 -m engram doctor
+PYTHONPATH=src python3 -m engram init /path/to/repo --seed-claude
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 python3 scripts/build_dist.py
 python3 scripts/render_homebrew_formula.py --owner <owner> --repo <repo>
@@ -32,4 +32,4 @@ This repository has no commit history yet, so start with short imperative commit
 
 ## Security & Configuration Tips
 
-Treat Claude chat archives and generated SQLite state as local-only data. Use `CODEMEM_HOME` when you need an isolated state directory during development or tests.
+Treat Claude chat archives and generated SQLite state as local-only data. Use `ENGRAM_HOME` when you need an isolated state directory during development or tests.

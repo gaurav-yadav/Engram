@@ -6,11 +6,11 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from codemem import config
-from codemem.db import Database
-from codemem.project import initialize_project
-from codemem.query import get_applicable_rules, search_memory
-from codemem.repoindex import ensure_repo_layout
+from engram import config
+from engram.db import Database
+from engram.project import initialize_project
+from engram.query import get_applicable_rules, search_memory
+from engram.repoindex import ensure_repo_layout
 
 
 class QueryTests(unittest.TestCase):
@@ -22,18 +22,18 @@ class QueryTests(unittest.TestCase):
             (repo_root / "README.md").write_text("# Demo\n", encoding="utf-8")
             ensure_repo_layout(repo_root)
 
-            with mock.patch.dict(os.environ, {"CODEMEM_HOME": str(home_root)}, clear=False):
+            with mock.patch.dict(os.environ, {"ENGRAM_HOME": str(home_root)}, clear=False):
                 config.ensure_default_global_config()
                 config.global_rule_path().write_text("# Global\nUse local-first defaults.\n", encoding="utf-8")
-                (repo_root / ".codemem" / "rules" / "repo.md").write_text(
+                (repo_root / ".engram" / "rules" / "repo.md").write_text(
                     "# Repo\nPrefer SQLite for local mode.\n",
                     encoding="utf-8",
                 )
-                (repo_root / ".codemem" / "rules" / "paths" / "src__codemem.md").write_text(
+                (repo_root / ".engram" / "rules" / "paths" / "src__engram.md").write_text(
                     "# Path\nKeep CLI output concise.\n",
                     encoding="utf-8",
                 )
-                (repo_root / ".codemem" / "rules" / "agents" / "reviewer.md").write_text(
+                (repo_root / ".engram" / "rules" / "agents" / "reviewer.md").write_text(
                     "# Reviewer\nLead with findings.\n",
                     encoding="utf-8",
                 )
@@ -51,7 +51,7 @@ class QueryTests(unittest.TestCase):
                     payload = get_applicable_rules(
                         db=db,
                         repo_root=repo_root,
-                        target_path="src/codemem/cli.py",
+                        target_path="src/engram/cli.py",
                         agent="reviewer",
                     )
                 finally:
@@ -67,7 +67,7 @@ class QueryTests(unittest.TestCase):
             repo_root.mkdir(parents=True)
             (repo_root / "README.md").write_text("# Demo\n", encoding="utf-8")
 
-            with mock.patch.dict(os.environ, {"CODEMEM_HOME": str(home_root)}, clear=False):
+            with mock.patch.dict(os.environ, {"ENGRAM_HOME": str(home_root)}, clear=False):
                 initialize_project(
                     repo_root=repo_root,
                     seed_claude=False,

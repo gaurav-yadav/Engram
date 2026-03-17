@@ -7,9 +7,9 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from codemem import config
-from codemem.db import Database
-from codemem.models import ClaudeEvent, ClaudeSession, ImportResult
+from engram import config
+from engram.db import Database
+from engram.models import ClaudeEvent, ClaudeSession, ImportResult
 
 
 def _parse_timestamp(raw: str | None) -> datetime | None:

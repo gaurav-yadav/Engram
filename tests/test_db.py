@@ -4,13 +4,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from codemem.db import Database
+from engram.db import Database
 
 
 class DatabaseTests(unittest.TestCase):
     def test_migrations_and_project_creation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            db = Database(Path(tmp) / "codemem.db")
+            db = Database(Path(tmp) / "engram.db")
             db.migrate()
             project_id = db.get_or_create_project(Path(tmp) / "repo")
             self.assertGreater(project_id, 0)

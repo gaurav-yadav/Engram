@@ -11,7 +11,7 @@ SRC = ROOT / "src"
 
 
 def _version() -> str:
-    init_path = SRC / "codemem" / "__init__.py"
+    init_path = SRC / "engram" / "__init__.py"
     for line in init_path.read_text(encoding="utf-8").splitlines():
         if line.startswith("__version__ = "):
             return line.split("=", 1)[1].strip().strip('"').strip("'")
@@ -27,10 +27,10 @@ def _sha256(path: Path) -> str:
 
 
 def _formula_text(owner: str, repo: str, version: str, sha256: str) -> str:
-    url = f"https://github.com/{owner}/{repo}/releases/download/v{version}/codemem-{version}.pyz"
+    url = f"https://github.com/{owner}/{repo}/releases/download/v{version}/engram-{version}.pyz"
     return "\n".join(
         [
-            "class Codemem < Formula",
+            "class Engram < Formula",
             '  desc "Local-first coding memory for repo-scoped rules and Claude archive import"',
             f'  homepage "https://github.com/{owner}/{repo}"',
             f'  url "{url}"',
@@ -41,16 +41,16 @@ def _formula_text(owner: str, repo: str, version: str, sha256: str) -> str:
             '  depends_on "python@3.11"',
             "",
             "  def install",
-            '    libexec.install "codemem-#{version}.pyz" => "codemem.pyz"',
-            '    (bin/"codemem").write <<~EOS',
+            '    libexec.install "engram-#{version}.pyz" => "engram.pyz"',
+            '    (bin/"engram").write <<~EOS',
             '      #!/bin/bash',
-            '      exec "#{Formula["python@3.11"].opt_bin}/python3" "#{libexec}/codemem.pyz" "$@"',
+            '      exec "#{Formula["python@3.11"].opt_bin}/python3" "#{libexec}/engram.pyz" "$@"',
             "    EOS",
             "  end",
             "",
             "  test do",
-            '    output = shell_output("#{bin}/codemem --version")',
-            '    assert_match "codemem #{version}", output',
+            '    output = shell_output("#{bin}/engram --version")',
+            '    assert_match "engram #{version}", output',
             "  end",
             "end",
             "",
@@ -59,28 +59,28 @@ def _formula_text(owner: str, repo: str, version: str, sha256: str) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Render a Homebrew formula for codemem")
+    parser = argparse.ArgumentParser(description="Render a Homebrew formula for engram")
     parser.add_argument("--owner", required=True, help="GitHub owner or org")
     parser.add_argument("--repo", required=True, help="GitHub repository name")
     parser.add_argument(
         "--artifact",
         default=None,
-        help="Path to the .pyz artifact; defaults to dist/codemem-<version>.pyz",
+        help="Path to the .pyz artifact; defaults to dist/engram-<version>.pyz",
     )
     parser.add_argument(
         "--output",
         default=None,
-        help="Optional output path; defaults to dist/codemem.rb",
+        help="Optional output path; defaults to dist/engram.rb",
     )
     args = parser.parse_args(argv)
 
     version = _version()
-    artifact = Path(args.artifact).resolve() if args.artifact else DIST / f"codemem-{version}.pyz"
+    artifact = Path(args.artifact).resolve() if args.artifact else DIST / f"engram-{version}.pyz"
     if not artifact.exists():
         raise FileNotFoundError(f"artifact not found: {artifact}")
 
     formula = _formula_text(args.owner, args.repo, version, _sha256(artifact))
-    output = Path(args.output).resolve() if args.output else DIST / "codemem.rb"
+    output = Path(args.output).resolve() if args.output else DIST / "engram.rb"
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(formula, encoding="utf-8")
     print(f"Wrote {output}")

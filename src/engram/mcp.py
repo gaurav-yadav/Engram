@@ -5,10 +5,10 @@ import sys
 from pathlib import Path
 from typing import Any, Callable
 
-from codemem import __version__, config
-from codemem.db import Database
-from codemem.doctor import all_required_ok, run as run_doctor
-from codemem.query import build_context, get_applicable_rules, get_project_snapshot, search_memory
+from engram import __version__, config
+from engram.db import Database
+from engram.doctor import all_required_ok, run as run_doctor
+from engram.query import build_context, get_applicable_rules, get_project_snapshot, search_memory
 
 
 ToolHandler = Callable[[dict[str, Any]], dict[str, Any]]
@@ -102,7 +102,7 @@ TOOLS: dict[str, tuple[ToolHandler, dict[str, Any]]] = {
     "doctor": (
         _doctor_tool,
         {
-            "description": "Validate local codemem runtime requirements.",
+            "description": "Validate local engram runtime requirements.",
             "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
         },
     ),
@@ -242,7 +242,7 @@ def run_stdio_server() -> None:
                     {
                         "protocolVersion": "2024-11-05",
                         "capabilities": {"tools": {}},
-                        "serverInfo": {"name": "codemem", "version": __version__},
+                        "serverInfo": {"name": "engram", "version": __version__},
                     },
                 ),
             )

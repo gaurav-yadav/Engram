@@ -5,9 +5,9 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from codemem import config
-from codemem.db import Database
-from codemem.rules import load_applicable_rules
+from engram import config
+from engram.db import Database
+from engram.rules import load_applicable_rules
 
 
 def _repo_root(repo_root: Path) -> Path:

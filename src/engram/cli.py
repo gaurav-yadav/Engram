@@ -6,12 +6,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from codemem import __version__
-from codemem.db import Database
-from codemem.doctor import all_required_ok, format_checks, run as run_doctor
-from codemem.mcp import run_stdio_server
-from codemem.project import initialize_project
-from codemem.query import build_context, get_applicable_rules, get_project_snapshot, search_memory
+from engram import __version__
+from engram.db import Database
+from engram.doctor import all_required_ok, format_checks, run as run_doctor
+from engram.mcp import run_stdio_server
+from engram.project import initialize_project
+from engram.query import build_context, get_applicable_rules, get_project_snapshot, search_memory
 
 
 def _parse_since(raw: str | None) -> int | None:
@@ -56,7 +56,7 @@ def _cmd_init(args: argparse.Namespace) -> int:
 
 
 def _db() -> Database:
-    from codemem import config
+    from engram import config
 
     db = Database(config.db_path())
     db.migrate()
@@ -243,7 +243,7 @@ def _cmd_mcp(_: argparse.Namespace) -> int:
 class _ServeHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/health":
-            self._send_json({"ok": True, "service": "codemem", "version": __version__})
+            self._send_json({"ok": True, "service": "engram", "version": __version__})
             return
         if self.path.startswith("/doctor"):
             checks = run_doctor()
@@ -290,7 +290,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="codemem")
+    parser = argparse.ArgumentParser(prog="engram")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -298,7 +298,7 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.add_argument("--repo", help="Optional repo path to validate")
     doctor.set_defaults(func=_cmd_doctor)
 
-    init_cmd = subparsers.add_parser("init", help="Bootstrap a repo for codemem")
+    init_cmd = subparsers.add_parser("init", help="Bootstrap a repo for engram")
     init_cmd.add_argument("repo", help="Repository root path")
     init_cmd.add_argument("--seed-claude", action="store_true", help="Import matching Claude chats")
     init_cmd.add_argument("--include-subagents", action="store_true", help="Include Claude subagent sessions")

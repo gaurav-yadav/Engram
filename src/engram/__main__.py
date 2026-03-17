@@ -1,4 +1,4 @@
-from codemem.cli import main
+from engram.cli import main
 
 
 if __name__ == "__main__":

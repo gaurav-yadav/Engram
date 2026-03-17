@@ -1,6 +1,6 @@
-# codemem
+# Engram
 
-`codemem` is a local-first coding memory tool for deterministic coding rules, Claude chat import, distilled repo memory, and assistant-facing retrieval.
+Engram is a local-first coding memory tool for deterministic coding rules, Claude chat import, distilled repo memory, and assistant-facing retrieval.
 
 Current scope:
 
@@ -22,14 +22,14 @@ Current scope:
 ## Quick start
 
 ```bash
-cd /Users/gauravyadav/exp/agent-memory
-PYTHONPATH=src python3 -m codemem doctor
-PYTHONPATH=src python3 -m codemem init /path/to/repo --seed-claude --include-subagents --since 180d
-PYTHONPATH=src python3 -m codemem project show /path/to/repo
-PYTHONPATH=src python3 -m codemem rules show /path/to/repo --path src/app.py --agent reviewer
-PYTHONPATH=src python3 -m codemem memory search /path/to/repo pytest --kind command
-PYTHONPATH=src python3 -m codemem context /path/to/repo "failing tests in ingestion"
-PYTHONPATH=src python3 -m codemem mcp
+cd Engram
+PYTHONPATH=src python3 -m engram doctor
+PYTHONPATH=src python3 -m engram init /path/to/repo --seed-claude --include-subagents --since 180d
+PYTHONPATH=src python3 -m engram project show /path/to/repo
+PYTHONPATH=src python3 -m engram rules show /path/to/repo --path src/app.py --agent reviewer
+PYTHONPATH=src python3 -m engram memory search /path/to/repo pytest --kind command
+PYTHONPATH=src python3 -m engram context /path/to/repo "failing tests in ingestion"
+PYTHONPATH=src python3 -m engram mcp
 ```
 
 ## Running On Another Machine
@@ -43,15 +43,15 @@ Target machine requirements:
 The simplest install path is the release artifact:
 
 ```bash
-curl -L -o codemem.pyz https://github.com/<owner>/<repo>/releases/download/v0.1.0/codemem-0.1.0.pyz
-install -m 755 codemem.pyz ~/.local/bin/codemem
-codemem doctor
+curl -L -o engram.pyz https://github.com/gaurav-yadav/Engram/releases/download/v0.1.0/engram-0.1.0.pyz
+install -m 755 engram.pyz ~/.local/bin/engram
+engram doctor
 ```
 
 If you are copying artifacts manually instead of publishing them, use:
 
 ```bash
-./scripts/install_artifact.sh dist/codemem-0.1.0.pyz
+./scripts/install_artifact.sh dist/engram-0.1.0.pyz
 ```
 
 The `.pyz` artifact is a Python zipapp, so it is a single executable file but still uses the target machine's Python runtime.
@@ -67,8 +67,8 @@ ls dist/
 
 This produces:
 
-- `codemem-<version>.pyz`
-- `codemem-<version>.tar.gz`
+- `engram-<version>.pyz`
+- `engram-<version>.tar.gz`
 - `checksums.txt`
 
 GitHub release publishing is wired in [release.yml](.github/workflows/release.yml). Pushing a tag like `v0.1.0` will:
@@ -87,24 +87,24 @@ git push origin v0.1.0
 
 This creates:
 
-- global state under `~/.codemem`
-- per-repo state under `/repo/.codemem`
+- global state under `~/.engram`
+- per-repo state under `/repo/.engram`
 
 Global cross-repo rules live at:
 
-- `~/.codemem/rules/global.md`
+- `~/.engram/rules/global.md`
 
 Per-repo rules live at:
 
-- `/repo/.codemem/rules/repo.md`
-- `/repo/.codemem/rules/agents/*.md`
-- `/repo/.codemem/rules/paths/*.md`
-- `/repo/.codemem/rules/branches/*.md`
+- `/repo/.engram/rules/repo.md`
+- `/repo/.engram/rules/agents/*.md`
+- `/repo/.engram/rules/paths/*.md`
+- `/repo/.engram/rules/branches/*.md`
 
-If the default home directory is not writable, set `CODEMEM_HOME`:
+If the default home directory is not writable, set `ENGRAM_HOME`:
 
 ```bash
-CODEMEM_HOME=/tmp/codemem PYTHONPATH=src python3 -m codemem doctor
+ENGRAM_HOME=/tmp/engram PYTHONPATH=src python3 -m engram doctor
 ```
 
 ## Notes
@@ -114,6 +114,6 @@ CODEMEM_HOME=/tmp/codemem PYTHONPATH=src python3 -m codemem doctor
 - Claude seed import archives raw sessions and promotes repeated commands plus explicit user preferences.
 - PostgreSQL, semantic retrieval, and richer memory extraction remain deferred until the local workflow is stable.
 
-## Publishing
+## Publishing Notes
 
-Detailed release and Homebrew notes live in [docs/PUBLISHING.md](/Users/gauravyadav/exp/agent-memory/docs/PUBLISHING.md).
+Detailed release and Homebrew notes live in [docs/PUBLISHING.md](docs/PUBLISHING.md).

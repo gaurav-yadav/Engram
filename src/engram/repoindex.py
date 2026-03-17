@@ -3,8 +3,8 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from codemem import config
-from codemem.models import DetectedDoc
+from engram import config
+from engram.models import DetectedDoc
 
 
 ROOT_DOC_CANDIDATES = (
@@ -32,7 +32,7 @@ IGNORE_DIRS = {
 
 
 def ensure_repo_layout(repo_root: Path) -> None:
-    state_dir = repo_root / ".codemem"
+    state_dir = repo_root / ".engram"
     for relative in (
         "rules",
         "rules/agents",
@@ -122,8 +122,8 @@ def scan_repo(repo_root: Path) -> list[DetectedDoc]:
             ),
         )
 
-    codemem_root = repo_root / ".codemem" / "rules"
-    repo_rule = codemem_root / "repo.md"
+    engram_root = repo_root / ".engram" / "rules"
+    repo_rule = engram_root / "repo.md"
     if repo_rule.exists():
         body = _read_text(repo_rule)
         docs.append(
@@ -137,7 +137,7 @@ def scan_repo(repo_root: Path) -> list[DetectedDoc]:
             ),
         )
 
-    agent_dir = codemem_root / "agents"
+    agent_dir = engram_root / "agents"
     if agent_dir.exists():
         for path in sorted(agent_dir.glob("*.md")):
             body = _read_text(path)
@@ -154,7 +154,7 @@ def scan_repo(repo_root: Path) -> list[DetectedDoc]:
                 ),
             )
 
-    paths_dir = codemem_root / "paths"
+    paths_dir = engram_root / "paths"
     if paths_dir.exists():
         for path in sorted(paths_dir.glob("*.md")):
             body = _read_text(path)
@@ -172,7 +172,7 @@ def scan_repo(repo_root: Path) -> list[DetectedDoc]:
                 ),
             )
 
-    branch_dir = codemem_root / "branches"
+    branch_dir = engram_root / "branches"
     if branch_dir.exists():
         for path in sorted(branch_dir.glob("*.md")):
             body = _read_text(path)

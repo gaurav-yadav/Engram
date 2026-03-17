@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from codemem.doctor import run
+from engram.doctor import run
 
 
 class DoctorTests(unittest.TestCase):
