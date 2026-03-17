@@ -40,18 +40,24 @@ Target machine requirements:
 - `git`
 - `rg`
 
-The simplest install path is the release artifact:
+The simplest install path is the release installer:
 
 ```bash
-curl -L -o engram.pyz https://github.com/gaurav-yadav/Engram/releases/download/v0.1.0/engram-0.1.0.pyz
-install -m 755 engram.pyz ~/.local/bin/engram
+curl -fsSL https://raw.githubusercontent.com/gaurav-yadav/Engram/main/scripts/install_release.sh | sh
+engram doctor
+```
+
+To install a specific release, pass the tag:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gaurav-yadav/Engram/main/scripts/install_release.sh | sh -s -- v0.1.0
 engram doctor
 ```
 
 If you are copying artifacts manually instead of publishing them, use:
 
 ```bash
-./scripts/install_artifact.sh dist/engram-0.1.0.pyz
+sh ./scripts/install_artifact.sh dist/engram-0.1.0.pyz
 ```
 
 The `.pyz` artifact is a Python zipapp, so it is a single executable file but still uses the target machine's Python runtime.

@@ -36,12 +36,25 @@ Local artifacts are built with:
 
 ## Direct Install From Release
 
-Once a GitHub release exists, another machine can install directly:
+Once a GitHub release exists, another machine can install with the release installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gaurav-yadav/Engram/main/scripts/install_release.sh | sh
+engram doctor
+```
+
+To pin a specific release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gaurav-yadav/Engram/main/scripts/install_release.sh | sh -s -- v0.1.0
+engram doctor
+```
+
+Manual artifact install still works:
 
 ```bash
 curl -L -o engram https://github.com/gaurav-yadav/Engram/releases/download/v0.1.0/engram-0.1.0.pyz
-chmod +x engram
-mv engram ~/.local/bin/engram
+install -m 755 engram ~/.local/bin/engram
 engram doctor
 ```
 
