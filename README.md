@@ -39,6 +39,7 @@ Target machine requirements:
 - `python3` 3.9+
 - `git`
 - `rg`
+- `~/.local/bin` on `PATH` if you want the installed `engram` command
 
 The simplest install path is the release installer:
 
@@ -61,6 +62,53 @@ sh ./scripts/install_artifact.sh dist/engram-0.1.0.pyz
 ```
 
 The `.pyz` artifact is a Python zipapp, so it is a single executable file but still uses the target machine's Python runtime.
+
+## Setup After Install
+
+Validate the machine first:
+
+```bash
+engram doctor
+```
+
+Bootstrap a repository:
+
+```bash
+engram init /path/to/repo --seed-claude --include-subagents --since 180d
+```
+
+That creates:
+
+- global state under `~/.engram`
+- per-repo state under `/path/to/repo/.engram`
+- global rules at `~/.engram/rules/global.md`
+- repo rules at `/path/to/repo/.engram/rules/repo.md`
+
+If Claude history exists on the machine under `~/.claude/projects`, `--seed-claude` imports matching chats into the local archive.
+
+If you want Engram state somewhere else:
+
+```bash
+export ENGRAM_HOME=/path/to/engram-state
+engram doctor
+```
+
+## Common Usage
+
+Inspect a bootstrapped project:
+
+```bash
+engram project show /path/to/repo
+engram rules show /path/to/repo --path src/app.py --agent reviewer
+engram memory search /path/to/repo pytest --kind command
+engram context /path/to/repo "failing ingestion tests"
+```
+
+Run the MCP server for Claude/Codex-style clients:
+
+```bash
+engram mcp
+```
 
 ## Publishing
 
@@ -89,28 +137,6 @@ Manual release flow:
 python3 scripts/build_dist.py
 git tag v0.1.0
 git push origin v0.1.0
-```
-
-This creates:
-
-- global state under `~/.engram`
-- per-repo state under `/repo/.engram`
-
-Global cross-repo rules live at:
-
-- `~/.engram/rules/global.md`
-
-Per-repo rules live at:
-
-- `/repo/.engram/rules/repo.md`
-- `/repo/.engram/rules/agents/*.md`
-- `/repo/.engram/rules/paths/*.md`
-- `/repo/.engram/rules/branches/*.md`
-
-If the default home directory is not writable, set `ENGRAM_HOME`:
-
-```bash
-ENGRAM_HOME=/tmp/engram PYTHONPATH=src python3 -m engram doctor
 ```
 
 ## Notes
