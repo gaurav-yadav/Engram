@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "engram"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local-first coding memory for repo-scoped rules, archive import, and distilled project context."
 readme = "README.md"
 requires-python = ">=3.9"
