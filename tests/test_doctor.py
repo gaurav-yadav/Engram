@@ -16,6 +16,7 @@ class DoctorTests(unittest.TestCase):
             self.assertIn("rg", names)
             self.assertIn("repo_exists", names)
             self.assertIn("repo_access", names)
+            self.assertIn("project_initialized", names)
 
 
 if __name__ == "__main__":

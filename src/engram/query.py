@@ -7,6 +7,7 @@ from typing import Any
 
 from engram import config
 from engram.db import Database
+from engram.errors import ProjectNotInitializedError
 from engram.rules import load_applicable_rules
 
 
@@ -15,9 +16,10 @@ def _repo_root(repo_root: Path) -> Path:
 
 
 def _load_project_or_raise(db: Database, repo_root: Path) -> sqlite3.Row:
-    row = db.get_project(_repo_root(repo_root))
+    resolved_root = _repo_root(repo_root)
+    row = db.get_project(resolved_root)
     if row is None:
-        raise ValueError(f"project is not initialized: {repo_root}")
+        raise ProjectNotInitializedError(str(resolved_root))
     return row
 
 
@@ -167,6 +169,30 @@ def search_memory(
         "query": query,
         "kind": kind,
         "results": [_memory_row_to_dict(db, row) for row in rows],
+    }
+
+
+def search_documents(
+    db: Database,
+    repo_root: Path,
+    query: str,
+    doc_type: str | None = None,
+    limit: int = 10,
+) -> dict[str, Any]:
+    repo_root = _repo_root(repo_root)
+    project = _load_project_or_raise(db, repo_root)
+    rows = db.search_documents(
+        project_id=int(project["id"]),
+        query=_safe_fts_query(query),
+        doc_type=doc_type,
+        limit=limit,
+    )
+    return {
+        "project_id": int(project["id"]),
+        "repo_root": str(repo_root),
+        "query": query,
+        "doc_type": doc_type,
+        "results": [_document_row_to_dict(row) for row in rows],
     }
 
 

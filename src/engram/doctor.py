@@ -67,6 +67,7 @@ def run(repo: Path | None = None) -> list[DoctorCheck]:
     )
 
     if repo is not None:
+        marker = config.repo_state_dir(repo) / "project.yaml"
         checks.append(
             DoctorCheck(
                 name="repo_exists",
@@ -81,6 +82,16 @@ def run(repo: Path | None = None) -> list[DoctorCheck]:
                 detail=f"{repo} is a readable directory"
                 if repo.exists() and repo.is_dir()
                 else f"{repo} is not a readable directory",
+            ),
+        )
+        checks.append(
+            DoctorCheck(
+                name="project_initialized",
+                ok=marker.exists(),
+                detail=f"Engram project marker found at {marker}"
+                if marker.exists()
+                else f"Engram project marker missing at {marker}; run `engram auto-init` or `engram init`",
+                required=False,
             ),
         )
     return checks

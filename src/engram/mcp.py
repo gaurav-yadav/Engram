@@ -8,7 +8,14 @@ from typing import Any, Callable
 from engram import __version__, config
 from engram.db import Database
 from engram.doctor import all_required_ok, run as run_doctor
-from engram.query import build_context, get_applicable_rules, get_project_snapshot, search_memory
+from engram.errors import ProjectNotInitializedError
+from engram.query import (
+    build_context,
+    get_applicable_rules,
+    get_project_snapshot,
+    search_documents,
+    search_memory,
+)
 
 
 ToolHandler = Callable[[dict[str, Any]], dict[str, Any]]
@@ -35,6 +42,16 @@ def _with_db(handler: Callable[[Database, dict[str, Any]], dict[str, Any]], argu
     db.migrate()
     try:
         return handler(db, arguments)
+    except ProjectNotInitializedError as exc:
+        return {
+            "status": "not_initialized",
+            "repo_root": exc.repo_root,
+            "message": (
+                f"Project '{exc.repo_root}' has not been initialized yet. "
+                f"Run `engram auto-init {exc.repo_root}` for idempotent setup or "
+                f"`engram init {exc.repo_root} --seed-claude` for a full bootstrap."
+            ),
+        }
     finally:
         db.close()
 
@@ -74,6 +91,24 @@ def _memory_search_tool(db: Database, arguments: dict[str, Any]) -> dict[str, An
         repo_root=Path(repo),
         query=query,
         kind=kind,
+        limit=int(limit) if isinstance(limit, int) else 10,
+    )
+
+
+def _document_search_tool(db: Database, arguments: dict[str, Any]) -> dict[str, Any]:
+    repo = arguments.get("repo")
+    query = arguments.get("query")
+    if not isinstance(repo, str) or not repo.strip():
+        raise ValueError("repo is required")
+    if not isinstance(query, str) or not query.strip():
+        raise ValueError("query is required")
+    doc_type = arguments.get("doc_type") if isinstance(arguments.get("doc_type"), str) else None
+    limit = arguments.get("limit")
+    return search_documents(
+        db=db,
+        repo_root=Path(repo),
+        query=query,
+        doc_type=doc_type,
         limit=int(limit) if isinstance(limit, int) else 10,
     )
 
@@ -146,6 +181,23 @@ TOOLS: dict[str, tuple[ToolHandler, dict[str, Any]]] = {
                     "repo": {"type": "string"},
                     "query": {"type": "string"},
                     "kind": {"type": "string"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                },
+                "required": ["repo", "query"],
+                "additionalProperties": False,
+            },
+        },
+    ),
+    "document_search": (
+        lambda arguments: _with_db(_document_search_tool, arguments),
+        {
+            "description": "Search indexed repository documents such as READMEs, manifests, and rules.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "repo": {"type": "string"},
+                    "query": {"type": "string"},
+                    "doc_type": {"type": "string"},
                     "limit": {"type": "integer", "minimum": 1, "maximum": 50},
                 },
                 "required": ["repo", "query"],

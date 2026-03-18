@@ -2,16 +2,37 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from engram import __version__
+from engram import __version__, config
 from engram.db import Database
 from engram.doctor import all_required_ok, format_checks, run as run_doctor
+from engram.errors import ProjectNotInitializedError
 from engram.mcp import run_stdio_server
 from engram.project import initialize_project
-from engram.query import build_context, get_applicable_rules, get_project_snapshot, search_memory
+from engram.query import (
+    build_context,
+    get_applicable_rules,
+    get_project_snapshot,
+    search_documents,
+    search_memory,
+)
+
+
+AUTOINIT_SHELL_SCRIPT = """#!/usr/bin/env bash
+set -eu
+
+REPO="${1:-$(pwd)}"
+MARKER="$REPO/.engram/project.yaml"
+
+[ -f "$MARKER" ] && exit 0
+
+nohup engram auto-init "$REPO" >/dev/null 2>&1 &
+exit 0
+"""
 
 
 def _parse_since(raw: str | None) -> int | None:
@@ -23,16 +44,78 @@ def _parse_since(raw: str | None) -> int | None:
     return int(value)
 
 
+def _excerpt(text: str, limit: int = 140) -> str:
+    collapsed = " ".join(text.split())
+    if len(collapsed) <= limit:
+        return collapsed
+    return collapsed[: limit - 3].rstrip() + "..."
+
+
+def _infer_repo_root(start: Path | None = None) -> Path | None:
+    current = (start or Path.cwd()).resolve()
+    for candidate in (current, *current.parents):
+        if (candidate / ".engram" / "project.yaml").exists():
+            return candidate
+        if (candidate / ".git").exists():
+            return candidate
+    return None
+
+
+def _resolve_repo_or_raise(raw_repo: str | None, *, fallback_to_cwd: bool = False) -> Path:
+    if raw_repo:
+        return Path(raw_repo).expanduser().resolve()
+    inferred = _infer_repo_root()
+    if inferred is not None:
+        return inferred
+    if fallback_to_cwd:
+        return Path.cwd().resolve()
+    raise ValueError("repo is required when not running inside a repository; pass --repo or run the command from the repo root")
+
+
+def _resolve_repo_and_query(raw_repo: str | None, terms: list[str]) -> tuple[Path, str]:
+    if not terms:
+        raise ValueError("query is required")
+
+    query_terms = list(terms)
+    if raw_repo:
+        repo = _resolve_repo_or_raise(raw_repo)
+    elif len(query_terms) > 1:
+        candidate = Path(query_terms[0]).expanduser()
+        if candidate.exists():
+            if not candidate.is_dir():
+                raise ValueError(f"{candidate} is not a readable repository directory")
+            repo = candidate.resolve()
+            query_terms = query_terms[1:]
+        else:
+            repo = _resolve_repo_or_raise(None)
+    else:
+        repo = _resolve_repo_or_raise(None)
+
+    query = " ".join(query_terms).strip()
+    if not query:
+        raise ValueError("query is required")
+    return repo, query
+
+
+def _uninitialized_message(repo_root: str) -> str:
+    return (
+        f"Project '{repo_root}' is not initialized. "
+        f"Run `engram auto-init {repo_root}` for idempotent setup or "
+        f"`engram init {repo_root} --seed-claude` for a full bootstrap."
+    )
+
+
 def _cmd_doctor(args: argparse.Namespace) -> int:
-    repo = Path(args.repo).resolve() if args.repo else None
+    repo = _resolve_repo_or_raise(args.repo) if args.repo else _infer_repo_root()
     checks = run_doctor(repo)
     print(format_checks(checks))
     return 0 if all_required_ok(checks) else 1
 
 
 def _cmd_init(args: argparse.Namespace) -> int:
+    repo_root = _resolve_repo_or_raise(args.repo, fallback_to_cwd=True)
     result = initialize_project(
-        repo_root=Path(args.repo),
+        repo_root=repo_root,
         seed_claude=bool(args.seed_claude),
         include_subagents=bool(args.include_subagents),
         since_days=_parse_since(args.since),
@@ -56,8 +139,6 @@ def _cmd_init(args: argparse.Namespace) -> int:
 
 
 def _db() -> Database:
-    from engram import config
-
     db = Database(config.db_path())
     db.migrate()
     return db
@@ -131,6 +212,18 @@ def _format_project(payload: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip()
 
 
+def _format_documents(payload: dict[str, Any]) -> str:
+    lines = [f"Document search for {payload['repo_root']}", f"Query: {payload['query']}", ""]
+    if not payload["results"]:
+        lines.append("No matching documents found.")
+        return "\n".join(lines)
+    for item in payload["results"]:
+        lines.append(f"[{item['doc_type']}] {item['path']}")
+        lines.append(_excerpt(item["body"], limit=220))
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
 def _format_context(payload: dict[str, Any]) -> str:
     lines = [f"Context for {payload['repo_root']}", f"Query: {payload['query']}", ""]
     if payload["summary"]:
@@ -147,25 +240,26 @@ def _format_context(payload: dict[str, Any]) -> str:
     lines.append("Matching memory:")
     if payload["memory"]:
         for item in payload["memory"]:
-            lines.append(f"- [{item['kind']}] {item['title']}")
+            lines.append(f"- [{item['kind']}] {item['title']}: {_excerpt(item['body'])}")
     else:
         lines.append("- None")
     lines.append("")
     lines.append("Matching documents:")
     if payload["documents"]:
         for doc in payload["documents"]:
-            lines.append(f"- [{doc['doc_type']}] {doc['path']}")
+            lines.append(f"- [{doc['doc_type']}] {doc['path']}: {_excerpt(doc['body'])}")
     else:
         lines.append("- None")
     return "\n".join(lines).rstrip()
 
 
 def _cmd_rules_show(args: argparse.Namespace) -> int:
+    repo_root = _resolve_repo_or_raise(args.repo)
     db = _db()
     try:
         payload = get_applicable_rules(
             db=db,
-            repo_root=Path(args.repo),
+            repo_root=repo_root,
             target_path=args.path,
             agent=args.agent,
             branch=args.branch,
@@ -181,12 +275,13 @@ def _cmd_rules_show(args: argparse.Namespace) -> int:
 
 
 def _cmd_memory_search(args: argparse.Namespace) -> int:
+    repo_root, query = _resolve_repo_and_query(args.repo, args.terms)
     db = _db()
     try:
         payload = search_memory(
             db=db,
-            repo_root=Path(args.repo),
-            query=args.query,
+            repo_root=repo_root,
+            query=query,
             kind=args.kind,
             limit=args.limit,
         )
@@ -200,9 +295,10 @@ def _cmd_memory_search(args: argparse.Namespace) -> int:
 
 
 def _cmd_project_show(args: argparse.Namespace) -> int:
+    repo_root = _resolve_repo_or_raise(args.repo)
     db = _db()
     try:
-        payload = get_project_snapshot(db=db, repo_root=Path(args.repo))
+        payload = get_project_snapshot(db=db, repo_root=repo_root)
     finally:
         db.close()
     if args.json:
@@ -212,13 +308,34 @@ def _cmd_project_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_docs_search(args: argparse.Namespace) -> int:
+    repo_root, query = _resolve_repo_and_query(args.repo, args.terms)
+    db = _db()
+    try:
+        payload = search_documents(
+            db=db,
+            repo_root=repo_root,
+            query=query,
+            doc_type=args.doc_type,
+            limit=args.limit,
+        )
+    finally:
+        db.close()
+    if args.json:
+        _print_json(payload)
+    else:
+        print(_format_documents(payload))
+    return 0
+
+
 def _cmd_context(args: argparse.Namespace) -> int:
+    repo_root, query = _resolve_repo_and_query(args.repo, args.terms)
     db = _db()
     try:
         payload = build_context(
             db=db,
-            repo_root=Path(args.repo),
-            query=args.query,
+            repo_root=repo_root,
+            query=query,
             target_path=args.path,
             agent=args.agent,
             branch=args.branch,
@@ -237,6 +354,75 @@ def _cmd_context(args: argparse.Namespace) -> int:
 
 def _cmd_mcp(_: argparse.Namespace) -> int:
     run_stdio_server()
+    return 0
+
+
+def _cmd_auto_init(args: argparse.Namespace) -> int:
+    import logging
+
+    repo_root = _resolve_repo_or_raise(args.repo, fallback_to_cwd=True)
+    marker = config.repo_state_dir(repo_root) / "project.yaml"
+
+    log_dir = config.global_state_dir() / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(
+        filename=str(log_dir / "auto-init.log"),
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        force=True,
+    )
+
+    if marker.exists():
+        return 0
+    if not repo_root.is_dir():
+        logging.warning("not a directory, skipping: %s", repo_root)
+        return 0
+
+    try:
+        result = initialize_project(
+            repo_root=repo_root,
+            seed_claude=True,
+            include_subagents=True,
+            since_days=180,
+        )
+        logging.info(
+            "auto-initialized %s (project_id=%d, docs=%d, rules=%d, sessions=%d)",
+            repo_root,
+            result.project_id,
+            result.docs_indexed,
+            result.rules_indexed,
+            result.import_result.sessions_imported,
+        )
+    except Exception:
+        logging.exception("auto-init failed for %s", repo_root)
+    return 0
+
+
+def _cmd_setup_hooks(_: argparse.Namespace) -> int:
+    import stat
+
+    bin_dir = config.global_state_dir() / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    script = bin_dir / "engram-auto-init.sh"
+    script.write_text(AUTOINIT_SHELL_SCRIPT, encoding="utf-8")
+    script.chmod(script.stat().st_mode | stat.S_IEXEC)
+
+    settings_path = config.home_dir() / ".claude" / "settings.json"
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    if settings_path.exists():
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    else:
+        settings = {}
+
+    hooks = settings.setdefault("hooks", {})
+    session_start = hooks.setdefault("SessionStart", [])
+    hook_command = f"bash {script}"
+    if not any(entry.get("command") == hook_command for entry in session_start if isinstance(entry, dict)):
+        session_start.append({"matcher": "", "command": hook_command})
+
+    settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+    print(f"Wrote hook script: {script}")
+    print(f"Updated settings:  {settings_path}")
     return 0
 
 
@@ -299,7 +485,7 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.set_defaults(func=_cmd_doctor)
 
     init_cmd = subparsers.add_parser("init", help="Bootstrap a repo for engram")
-    init_cmd.add_argument("repo", help="Repository root path")
+    init_cmd.add_argument("repo", nargs="?", help="Repository root path (default: current repo or cwd)")
     init_cmd.add_argument("--seed-claude", action="store_true", help="Import matching Claude chats")
     init_cmd.add_argument("--include-subagents", action="store_true", help="Include Claude subagent sessions")
     init_cmd.add_argument("--since", default="180d", help="Import Claude sessions newer than this window, e.g. 90d")
@@ -308,14 +494,14 @@ def build_parser() -> argparse.ArgumentParser:
     project = subparsers.add_parser("project", help="Inspect initialized projects")
     project_subparsers = project.add_subparsers(dest="project_command", required=True)
     project_show = project_subparsers.add_parser("show", help="Show project stats and summaries")
-    project_show.add_argument("repo", help="Repository root path")
+    project_show.add_argument("repo", nargs="?", help="Repository root path (default: current repo)")
     project_show.add_argument("--json", action="store_true", help="Emit JSON")
     project_show.set_defaults(func=_cmd_project_show)
 
     rules = subparsers.add_parser("rules", help="Inspect scoped rules")
     rules_subparsers = rules.add_subparsers(dest="rules_command", required=True)
     rules_show = rules_subparsers.add_parser("show", help="Show applicable rules")
-    rules_show.add_argument("repo", help="Repository root path")
+    rules_show.add_argument("repo", nargs="?", help="Repository root path (default: current repo)")
     rules_show.add_argument("--path", help="Optional repo-relative or absolute target path")
     rules_show.add_argument("--agent", help="Optional agent scope key")
     rules_show.add_argument("--branch", help="Optional branch scope key")
@@ -326,16 +512,26 @@ def build_parser() -> argparse.ArgumentParser:
     memory = subparsers.add_parser("memory", help="Inspect distilled memory")
     memory_subparsers = memory.add_subparsers(dest="memory_command", required=True)
     memory_search = memory_subparsers.add_parser("search", help="Search project memory")
-    memory_search.add_argument("repo", help="Repository root path")
-    memory_search.add_argument("query", help="Search query")
+    memory_search.add_argument("terms", nargs="+", help="Query terms, optionally prefixed with a repo path")
+    memory_search.add_argument("--repo", help="Optional repository root override")
     memory_search.add_argument("--kind", help="Optional memory kind filter")
     memory_search.add_argument("--limit", type=int, default=10, help="Maximum results")
     memory_search.add_argument("--json", action="store_true", help="Emit JSON")
     memory_search.set_defaults(func=_cmd_memory_search)
 
+    docs = subparsers.add_parser("docs", help="Search indexed repository documents")
+    docs_subparsers = docs.add_subparsers(dest="docs_command", required=True)
+    docs_search = docs_subparsers.add_parser("search", help="Search indexed documents")
+    docs_search.add_argument("terms", nargs="+", help="Query terms, optionally prefixed with a repo path")
+    docs_search.add_argument("--repo", help="Optional repository root override")
+    docs_search.add_argument("--type", dest="doc_type", help="Optional document type filter")
+    docs_search.add_argument("--limit", type=int, default=10, help="Maximum results")
+    docs_search.add_argument("--json", action="store_true", help="Emit JSON")
+    docs_search.set_defaults(func=_cmd_docs_search)
+
     context = subparsers.add_parser("context", help="Assemble project context for a coding query")
-    context.add_argument("repo", help="Repository root path")
-    context.add_argument("query", help="Coding question or task")
+    context.add_argument("terms", nargs="+", help="Query terms, optionally prefixed with a repo path")
+    context.add_argument("--repo", help="Optional repository root override")
     context.add_argument("--path", help="Optional repo-relative or absolute target path")
     context.add_argument("--agent", help="Optional agent scope key")
     context.add_argument("--branch", help="Optional branch scope key")
@@ -348,6 +544,13 @@ def build_parser() -> argparse.ArgumentParser:
     mcp = subparsers.add_parser("mcp", help="Run the MCP stdio server")
     mcp.set_defaults(func=_cmd_mcp)
 
+    auto_init = subparsers.add_parser("auto-init", help="Idempotent init for hooks and first-run setup")
+    auto_init.add_argument("repo", nargs="?", help="Repository root path (default: current repo or cwd)")
+    auto_init.set_defaults(func=_cmd_auto_init)
+
+    setup_hooks = subparsers.add_parser("setup-hooks", help="Install Claude session-start auto-init hooks")
+    setup_hooks.set_defaults(func=_cmd_setup_hooks)
+
     serve = subparsers.add_parser("serve", help="Run the local HTTP service skeleton")
     serve.add_argument("--listen", default="127.0.0.1:7411", help="Host:port listen address")
     serve.set_defaults(func=_cmd_serve)
@@ -358,4 +561,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    return int(args.func(args))
+    try:
+        return int(args.func(args))
+    except ProjectNotInitializedError as exc:
+        print(_uninitialized_message(exc.repo_root), file=sys.stderr)
+        return 2
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
