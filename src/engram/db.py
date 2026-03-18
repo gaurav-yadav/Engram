@@ -183,7 +183,14 @@ class Database:
         self.conn = sqlite3.connect(path)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA busy_timeout=10000")
         self.conn.execute("PRAGMA foreign_keys=ON")
+
+    def __enter__(self) -> Database:
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        self.close()
 
     def close(self) -> None:
         self.conn.close()
@@ -237,6 +244,17 @@ class Database:
             """,
             (str(repo_path.resolve()),),
         ).fetchone()
+
+    def touch_project(self, project_id: int) -> None:
+        with self.conn:
+            self.conn.execute(
+                """
+                UPDATE projects
+                SET updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (project_id,),
+            )
 
     def ensure_scope(
         self,
@@ -557,6 +575,42 @@ class Database:
                 (project_id,),
             ).fetchall()
         return list(rows)
+
+    def get_memory_item(self, project_id: int, memory_id: int) -> sqlite3.Row | None:
+        return self.conn.execute(
+            """
+            SELECT m.*, s.scope_type, s.scope_key
+            FROM memory_items m
+            JOIN scopes s ON s.id = m.scope_id
+            WHERE m.project_id = ? AND m.id = ?
+            """,
+            (project_id, memory_id),
+        ).fetchone()
+
+    def delete_memory_item(self, project_id: int, memory_id: int) -> bool:
+        row = self.conn.execute(
+            """
+            SELECT id
+            FROM memory_items
+            WHERE project_id = ? AND id = ?
+            """,
+            (project_id, memory_id),
+        ).fetchone()
+        if row is None:
+            return False
+        with self.conn:
+            self.conn.execute(
+                "DELETE FROM memory_items_fts WHERE memory_id = ?",
+                (memory_id,),
+            )
+            self.conn.execute(
+                """
+                DELETE FROM memory_items
+                WHERE project_id = ? AND id = ?
+                """,
+                (project_id, memory_id),
+            )
+        return True
 
     def search_memory(
         self,

@@ -70,3 +70,13 @@ class InitResult:
     rules_indexed: int
     import_result: ImportResult
     summaries_written: list[Path]
+
+
+@dataclass
+class SyncResult:
+    repo_root: Path
+    project_id: int
+    docs_indexed: int
+    rules_indexed: int
+    import_result: ImportResult
+    summaries_written: list[Path]

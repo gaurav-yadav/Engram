@@ -61,19 +61,12 @@ The main remaining issues are operational hardening rather than architectural co
 - **Current state:** Still real.
 - **Suggested fix:** Validate scope types against `SCOPE_ORDER` before inserting or prioritizing them.
 
-### 6. The architecture doc still omits `document_search`
-
-- **File:** `docs/architecture.md`
-- **Why it matters:** The current MCP implementation exposes `document_search`, but the architecture document’s tool catalog still lists only `doctor`, `project_show`, `rules_show`, `memory_search`, and `context_build`.
-- **Current state:** Still real.
-- **Suggested fix:** Update the tool catalog and the “Exposed tools” section in `docs/architecture.md`.
-
-### 7. CLI input validation is serviceable but still rough in edge cases
+### 6. Positional repo/query parsing still has ambiguity for some search commands
 
 - **File:** `src/engram/cli.py`
-- **Why it matters:** `_parse_since()` still raises the raw `int()` conversion error for malformed values, and some invalid-input messages remain more developer-oriented than user-oriented.
-- **Current state:** Still real.
-- **Suggested fix:** Turn parsing failures into explicit CLI-friendly messages, especially for `--since`.
+- **Why it matters:** `memory search`, `docs search`, and `context` support both inferred repos and an optional leading repo path. That is convenient, but it means a first positional term that happens to exist as a directory can be interpreted as a repo override rather than part of the query.
+- **Current state:** Still real. The common case is fine, but the parser favors “existing directory means repo” over “directory name is part of the query”.
+- **Suggested fix:** Prefer explicit `--repo` for overrides long-term, or add a `--` separator / parser mode that removes the ambiguity.
 
 ---
 
@@ -102,4 +95,4 @@ These older review claims are no longer accurate and should not be carried forwa
 1. Harden initialization cleanup and hook generation.
 2. Clean up `doctor.py` and CLI validation rough edges.
 3. Add MCP transport tests and HTTP endpoint tests.
-4. Update `docs/architecture.md` so the docs match the current product surface.
+4. Add more transport- and failure-path coverage before widening adoption.

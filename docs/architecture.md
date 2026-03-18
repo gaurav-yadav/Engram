@@ -201,9 +201,14 @@ registered as a console script in `pyproject.toml`.
 |------------------|----------------------|---------------------------------------------------|
 | `doctor`         | `_cmd_doctor`        | Validates git, rg, writable state dirs, Claude history |
 | `init`           | `_cmd_init`          | Bootstraps repo: index docs, rules, import Claude  |
+| `sync`           | `_cmd_sync`          | Refreshes indexed docs, rules, summaries, and optional Claude imports |
 | `project show`   | `_cmd_project_show`  | Displays project stats and summaries               |
 | `rules show`     | `_cmd_rules_show`    | Resolves and displays applicable rules             |
 | `memory search`  | `_cmd_memory_search` | FTS search over distilled memory items             |
+| `memory list`    | `_cmd_memory_list`   | Lists stored project memory                        |
+| `memory store`   | `_cmd_memory_store`  | Stores a manual project memory item                |
+| `memory delete`  | `_cmd_memory_delete` | Deletes a stored project memory item by ID         |
+| `docs search`    | `_cmd_docs_search`   | Searches indexed project documents                 |
 | `context`        | `_cmd_context`       | Assembles full context bundle for a query          |
 | `mcp`            | `_cmd_mcp`           | Launches the MCP stdio server                      |
 | `serve`          | `_cmd_serve`         | Runs a minimal HTTP health-check server            |
@@ -237,10 +242,12 @@ Content-Length framed messages) and writes one JSON object per line to stdout.
 | `tools/call`              | Dispatches to the named tool handler                  |
 | `shutdown`                | Returns success and exits the server loop             |
 
-**Exposed tools:** `doctor`, `project_show`, `rules_show`, `memory_search`,
-`context_build`. Each tool handler validates its arguments, opens a database
-connection via `_with_db`, delegates to `query.py` functions, and returns the
-result as a JSON text content block.
+**Exposed tools:** `doctor`, `project_show`, `project_sync`, `rules_show`,
+`memory_search`, `memory_list`, `memory_store`, `memory_delete`,
+`document_search`, and `context_build`. Each tool handler validates its
+arguments, opens a database connection via `_with_db` where needed, delegates
+to `query.py` or `project.py`, and returns the result as a JSON text content
+block.
 
 ### 4.3 Database Layer (`src/engram/db.py`)
 
@@ -629,8 +636,13 @@ Returned by `tools/list`:
 |-----------------|-------------------|-------------------------------------------------|---------------------------------------------------------------|
 | `doctor`        | (none)            | (none)                                          | Validate local runtime requirements                           |
 | `project_show`  | `repo`            | (none)                                          | Show project stats and summaries                              |
+| `project_sync`  | `repo`            | `seed_claude`, `include_subagents`, `since_days` | Initialize or refresh project state                           |
 | `rules_show`    | `repo`            | `path`, `agent`, `branch`, `session`            | Resolve deterministic scoped rules                            |
 | `memory_search` | `repo`, `query`   | `kind`, `limit` (1-50)                          | Search distilled repo memory                                  |
+| `memory_list`   | `repo`            | `kind`                                          | List stored project memory                                    |
+| `memory_store`  | `repo`, `kind`, `title`, `body` | `source_context`                      | Store a project memory item                                   |
+| `memory_delete` | `repo`, `memory_id` | (none)                                        | Delete a stored project memory item                           |
+| `document_search` | `repo`, `query` | `doc_type`, `limit` (1-50)                     | Search indexed project documents                              |
 | `context_build` | `repo`, `query`   | `path`, `agent`, `branch`, `session`, `memory_limit` (1-20), `doc_limit` (1-20) | Build full context bundle |
 
 ### Tool Call / Response Format

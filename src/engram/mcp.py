@@ -9,16 +9,39 @@ from engram import __version__, config
 from engram.db import Database
 from engram.doctor import all_required_ok, run as run_doctor
 from engram.errors import ProjectNotInitializedError
+from engram.project import sync_project
 from engram.query import (
     build_context,
+    delete_memory,
     get_applicable_rules,
     get_project_snapshot,
+    list_memory,
     search_documents,
     search_memory,
+    store_memory,
 )
 
 
 ToolHandler = Callable[[dict[str, Any]], dict[str, Any]]
+
+
+def _require_str(arguments: dict[str, Any], name: str) -> str:
+    value = arguments.get(name)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} is required")
+    return value
+
+
+def _optional_str(arguments: dict[str, Any], name: str) -> str | None:
+    value = arguments.get(name)
+    if isinstance(value, str) and value.strip():
+        return value
+    return None
+
+
+def _optional_int(arguments: dict[str, Any], name: str, default: int) -> int:
+    value = arguments.get(name)
+    return int(value) if isinstance(value, int) else default
 
 
 def _doctor_tool(_: dict[str, Any]) -> dict[str, Any]:
@@ -57,79 +80,106 @@ def _with_db(handler: Callable[[Database, dict[str, Any]], dict[str, Any]], argu
 
 
 def _project_show_tool(db: Database, arguments: dict[str, Any]) -> dict[str, Any]:
-    repo = arguments.get("repo")
-    if not isinstance(repo, str) or not repo.strip():
-        raise ValueError("repo is required")
-    return get_project_snapshot(db, Path(repo))
+    return get_project_snapshot(db, Path(_require_str(arguments, "repo")))
 
 
 def _rules_show_tool(db: Database, arguments: dict[str, Any]) -> dict[str, Any]:
-    repo = arguments.get("repo")
-    if not isinstance(repo, str) or not repo.strip():
-        raise ValueError("repo is required")
     return get_applicable_rules(
         db=db,
-        repo_root=Path(repo),
-        target_path=arguments.get("path") if isinstance(arguments.get("path"), str) else None,
-        agent=arguments.get("agent") if isinstance(arguments.get("agent"), str) else None,
-        branch=arguments.get("branch") if isinstance(arguments.get("branch"), str) else None,
-        session_key=arguments.get("session") if isinstance(arguments.get("session"), str) else None,
+        repo_root=Path(_require_str(arguments, "repo")),
+        target_path=_optional_str(arguments, "path"),
+        agent=_optional_str(arguments, "agent"),
+        branch=_optional_str(arguments, "branch"),
+        session_key=_optional_str(arguments, "session"),
     )
 
 
 def _memory_search_tool(db: Database, arguments: dict[str, Any]) -> dict[str, Any]:
-    repo = arguments.get("repo")
-    query = arguments.get("query")
-    if not isinstance(repo, str) or not repo.strip():
-        raise ValueError("repo is required")
-    if not isinstance(query, str) or not query.strip():
-        raise ValueError("query is required")
-    kind = arguments.get("kind") if isinstance(arguments.get("kind"), str) else None
-    limit = arguments.get("limit")
     return search_memory(
         db=db,
-        repo_root=Path(repo),
-        query=query,
-        kind=kind,
-        limit=int(limit) if isinstance(limit, int) else 10,
+        repo_root=Path(_require_str(arguments, "repo")),
+        query=_require_str(arguments, "query"),
+        kind=_optional_str(arguments, "kind"),
+        limit=_optional_int(arguments, "limit", 10),
     )
 
 
 def _document_search_tool(db: Database, arguments: dict[str, Any]) -> dict[str, Any]:
-    repo = arguments.get("repo")
-    query = arguments.get("query")
-    if not isinstance(repo, str) or not repo.strip():
-        raise ValueError("repo is required")
-    if not isinstance(query, str) or not query.strip():
-        raise ValueError("query is required")
-    doc_type = arguments.get("doc_type") if isinstance(arguments.get("doc_type"), str) else None
-    limit = arguments.get("limit")
     return search_documents(
         db=db,
-        repo_root=Path(repo),
-        query=query,
-        doc_type=doc_type,
-        limit=int(limit) if isinstance(limit, int) else 10,
+        repo_root=Path(_require_str(arguments, "repo")),
+        query=_require_str(arguments, "query"),
+        doc_type=_optional_str(arguments, "doc_type"),
+        limit=_optional_int(arguments, "limit", 10),
     )
 
 
 def _context_build_tool(db: Database, arguments: dict[str, Any]) -> dict[str, Any]:
-    repo = arguments.get("repo")
-    query = arguments.get("query")
-    if not isinstance(repo, str) or not repo.strip():
-        raise ValueError("repo is required")
-    if not isinstance(query, str) or not query.strip():
-        raise ValueError("query is required")
     return build_context(
         db=db,
-        repo_root=Path(repo),
-        query=query,
-        target_path=arguments.get("path") if isinstance(arguments.get("path"), str) else None,
-        agent=arguments.get("agent") if isinstance(arguments.get("agent"), str) else None,
-        branch=arguments.get("branch") if isinstance(arguments.get("branch"), str) else None,
-        session_key=arguments.get("session") if isinstance(arguments.get("session"), str) else None,
-        memory_limit=int(arguments["memory_limit"]) if isinstance(arguments.get("memory_limit"), int) else 5,
-        doc_limit=int(arguments["doc_limit"]) if isinstance(arguments.get("doc_limit"), int) else 5,
+        repo_root=Path(_require_str(arguments, "repo")),
+        query=_require_str(arguments, "query"),
+        target_path=_optional_str(arguments, "path"),
+        agent=_optional_str(arguments, "agent"),
+        branch=_optional_str(arguments, "branch"),
+        session_key=_optional_str(arguments, "session"),
+        memory_limit=_optional_int(arguments, "memory_limit", 5),
+        doc_limit=_optional_int(arguments, "doc_limit", 5),
+    )
+
+
+def _project_sync_tool(_: Database, arguments: dict[str, Any]) -> dict[str, Any]:
+    repo = Path(_require_str(arguments, "repo"))
+    since_days = arguments.get("since_days")
+    if since_days is not None and not isinstance(since_days, int):
+        raise ValueError("since_days must be an integer")
+    result = sync_project(
+        repo_root=repo,
+        seed_claude=bool(arguments.get("seed_claude", True)),
+        include_subagents=bool(arguments.get("include_subagents", False)),
+        since_days=since_days if isinstance(since_days, int) else 180,
+    )
+    return {
+        "repo_root": str(result.repo_root),
+        "project_id": result.project_id,
+        "docs_indexed": result.docs_indexed,
+        "rules_indexed": result.rules_indexed,
+        "sessions_imported": result.import_result.sessions_imported,
+        "sessions_skipped": result.import_result.sessions_skipped,
+        "events_imported": result.import_result.events_imported,
+        "command_memories_added": result.import_result.command_memories_added,
+        "preference_memories_added": result.import_result.preference_memories_added,
+        "summaries_written": [str(path) for path in result.summaries_written],
+    }
+
+
+def _memory_list_tool(db: Database, arguments: dict[str, Any]) -> dict[str, Any]:
+    return list_memory(
+        db=db,
+        repo_root=Path(_require_str(arguments, "repo")),
+        kind=_optional_str(arguments, "kind"),
+    )
+
+
+def _memory_store_tool(db: Database, arguments: dict[str, Any]) -> dict[str, Any]:
+    return store_memory(
+        db=db,
+        repo_root=Path(_require_str(arguments, "repo")),
+        kind=_require_str(arguments, "kind"),
+        title=_require_str(arguments, "title"),
+        body=_require_str(arguments, "body"),
+        source_context=_optional_str(arguments, "source_context"),
+    )
+
+
+def _memory_delete_tool(db: Database, arguments: dict[str, Any]) -> dict[str, Any]:
+    memory_id = arguments.get("memory_id")
+    if not isinstance(memory_id, int):
+        raise ValueError("memory_id is required")
+    return delete_memory(
+        db=db,
+        repo_root=Path(_require_str(arguments, "repo")),
+        memory_id=memory_id,
     )
 
 
@@ -148,6 +198,23 @@ TOOLS: dict[str, tuple[ToolHandler, dict[str, Any]]] = {
             "inputSchema": {
                 "type": "object",
                 "properties": {"repo": {"type": "string"}},
+                "required": ["repo"],
+                "additionalProperties": False,
+            },
+        },
+    ),
+    "project_sync": (
+        lambda arguments: _with_db(_project_sync_tool, arguments),
+        {
+            "description": "Initialize or refresh project state, documents, rules, summaries, and optional Claude imports.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "repo": {"type": "string"},
+                    "seed_claude": {"type": "boolean"},
+                    "include_subagents": {"type": "boolean"},
+                    "since_days": {"type": "integer", "minimum": 0},
+                },
                 "required": ["repo"],
                 "additionalProperties": False,
             },
@@ -184,6 +251,54 @@ TOOLS: dict[str, tuple[ToolHandler, dict[str, Any]]] = {
                     "limit": {"type": "integer", "minimum": 1, "maximum": 50},
                 },
                 "required": ["repo", "query"],
+                "additionalProperties": False,
+            },
+        },
+    ),
+    "memory_list": (
+        lambda arguments: _with_db(_memory_list_tool, arguments),
+        {
+            "description": "List stored memory for a project, optionally filtered by kind.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "repo": {"type": "string"},
+                    "kind": {"type": "string"},
+                },
+                "required": ["repo"],
+                "additionalProperties": False,
+            },
+        },
+    ),
+    "memory_store": (
+        lambda arguments: _with_db(_memory_store_tool, arguments),
+        {
+            "description": "Store a project memory item such as a note, lesson, or preference.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "repo": {"type": "string"},
+                    "kind": {"type": "string"},
+                    "title": {"type": "string", "maxLength": 80},
+                    "body": {"type": "string", "maxLength": 2000},
+                    "source_context": {"type": "string", "maxLength": 500},
+                },
+                "required": ["repo", "kind", "title", "body"],
+                "additionalProperties": False,
+            },
+        },
+    ),
+    "memory_delete": (
+        lambda arguments: _with_db(_memory_delete_tool, arguments),
+        {
+            "description": "Delete a stored project memory item by ID.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "repo": {"type": "string"},
+                    "memory_id": {"type": "integer"},
+                },
+                "required": ["repo", "memory_id"],
                 "additionalProperties": False,
             },
         },

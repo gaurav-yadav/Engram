@@ -37,21 +37,23 @@ def run(repo: Path | None = None) -> list[DoctorCheck]:
     )
 
     global_state = config.global_state_dir()
+    global_state_writable = _is_writable_dir(global_state)
     checks.append(
         DoctorCheck(
             name="global_state",
-            ok=_is_writable_dir(global_state),
-            detail=f"{global_state} is writable" if _is_writable_dir(global_state) else f"{global_state} is not writable",
+            ok=global_state_writable,
+            detail=f"{global_state} is writable" if global_state_writable else f"{global_state} is not writable",
         ),
     )
 
     db_parent = config.db_path().parent
+    db_parent_writable = _is_writable_dir(db_parent)
     checks.append(
         DoctorCheck(
             name="sqlite_path",
-            ok=_is_writable_dir(db_parent),
+            ok=db_parent_writable,
             detail=f"{db_parent} can host the SQLite database"
-            if _is_writable_dir(db_parent)
+            if db_parent_writable
             else f"{db_parent} is not writable",
         ),
     )

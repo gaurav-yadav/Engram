@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -12,13 +13,16 @@ from engram.db import Database
 from engram.doctor import all_required_ok, format_checks, run as run_doctor
 from engram.errors import ProjectNotInitializedError
 from engram.mcp import run_stdio_server
-from engram.project import initialize_project
+from engram.project import initialize_project, sync_project
 from engram.query import (
     build_context,
+    delete_memory,
     get_applicable_rules,
     get_project_snapshot,
+    list_memory,
     search_documents,
     search_memory,
+    store_memory,
 )
 
 
@@ -30,7 +34,11 @@ MARKER="$REPO/.engram/project.yaml"
 
 [ -f "$MARKER" ] && exit 0
 
-nohup engram auto-init "$REPO" >/dev/null 2>&1 &
+if command -v engram >/dev/null 2>&1; then
+  nohup engram auto-init "$REPO" >/dev/null 2>&1 &
+else
+  nohup python3 -m engram auto-init "$REPO" >/dev/null 2>&1 &
+fi
 exit 0
 """
 
@@ -41,7 +49,10 @@ def _parse_since(raw: str | None) -> int | None:
     value = raw.strip().lower()
     if value.endswith("d"):
         value = value[:-1]
-    return int(value)
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ValueError("--since must be a number of days, e.g. '90d' or '90'") from exc
 
 
 def _excerpt(text: str, limit: int = 140) -> str:
@@ -138,6 +149,26 @@ def _cmd_init(args: argparse.Namespace) -> int:
     return 0
 
 
+def _format_sync_result(prefix: str, result: Any) -> str:
+    lines = [
+        f"{prefix} {result.repo_root}",
+        f"Project ID: {result.project_id}",
+        f"Indexed documents: {result.docs_indexed}",
+        f"Indexed rules: {result.rules_indexed}",
+        (
+            f"Imported Claude sessions: {result.import_result.sessions_imported} "
+            f"(skipped {result.import_result.sessions_skipped})"
+        ),
+        f"Imported archive events: {result.import_result.events_imported}",
+        f"Promoted command memories: {result.import_result.command_memories_added}",
+        f"Promoted preference memories: {result.import_result.preference_memories_added}",
+    ]
+    if result.summaries_written:
+        lines.append("Wrote summaries:")
+        lines.extend(f"  - {path}" for path in result.summaries_written)
+    return "\n".join(lines)
+
+
 def _db() -> Database:
     db = Database(config.db_path())
     db.migrate()
@@ -196,6 +227,7 @@ def _format_project(payload: dict[str, Any]) -> str:
     lines = [
         f"Project: {project['repo_name']}",
         f"Repo: {project['repo_path']}",
+        f"Last synced: {project['last_synced_at']}",
         "",
         "Stats:",
         f"  - documents: {stats['documents_count']}",
@@ -209,6 +241,22 @@ def _format_project(payload: dict[str, Any]) -> str:
         lines.append(payload["summaries"]["project"].strip())
     else:
         lines.append("No project summary found.")
+    return "\n".join(lines).rstrip()
+
+
+def _format_memory_list(payload: dict[str, Any]) -> str:
+    lines = [f"Memory for {payload['repo_root']}"]
+    if payload["kind"]:
+        lines.append(f"Kind: {payload['kind']}")
+    lines.append("")
+    if not payload["results"]:
+        lines.append("No memory items found.")
+        return "\n".join(lines)
+    for item in payload["results"]:
+        lines.append(f"#{item['id']} [{item['kind']}] {item['title']}")
+        lines.append(f"Scope: {item['scope_type']} {item['scope_key']}")
+        lines.append(_excerpt(item["body"], limit=220))
+        lines.append("")
     return "\n".join(lines).rstrip()
 
 
@@ -294,6 +342,67 @@ def _cmd_memory_search(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_memory_list(args: argparse.Namespace) -> int:
+    repo_root = _resolve_repo_or_raise(args.repo)
+    db = _db()
+    try:
+        payload = list_memory(
+            db=db,
+            repo_root=repo_root,
+            kind=args.kind,
+        )
+    finally:
+        db.close()
+    if args.json:
+        _print_json(payload)
+    else:
+        print(_format_memory_list(payload))
+    return 0
+
+
+def _cmd_memory_store(args: argparse.Namespace) -> int:
+    repo_root = _resolve_repo_or_raise(args.repo)
+    db = _db()
+    try:
+        payload = store_memory(
+            db=db,
+            repo_root=repo_root,
+            kind=args.kind,
+            title=args.title,
+            body=args.body,
+            source_context=args.source_context,
+        )
+    finally:
+        db.close()
+    if args.json:
+        _print_json(payload)
+    else:
+        memory = payload["memory"]
+        print(f"Stored memory #{memory['id']} [{memory['kind']}] {memory['title']}")
+    return 0
+
+
+def _cmd_memory_delete(args: argparse.Namespace) -> int:
+    repo_root = _resolve_repo_or_raise(args.repo)
+    db = _db()
+    try:
+        payload = delete_memory(
+            db=db,
+            repo_root=repo_root,
+            memory_id=args.memory_id,
+        )
+    finally:
+        db.close()
+    if args.json:
+        _print_json(payload)
+    else:
+        if payload["deleted"]:
+            print(f"Deleted memory #{payload['memory_id']}")
+        else:
+            print(f"Memory #{payload['memory_id']} not found")
+    return 0
+
+
 def _cmd_project_show(args: argparse.Namespace) -> int:
     repo_root = _resolve_repo_or_raise(args.repo)
     db = _db()
@@ -305,6 +414,18 @@ def _cmd_project_show(args: argparse.Namespace) -> int:
         _print_json(payload)
     else:
         print(_format_project(payload))
+    return 0
+
+
+def _cmd_sync(args: argparse.Namespace) -> int:
+    repo_root = _resolve_repo_or_raise(args.repo, fallback_to_cwd=True)
+    result = sync_project(
+        repo_root=repo_root,
+        seed_claude=not args.skip_claude,
+        include_subagents=bool(args.include_subagents),
+        since_days=_parse_since(args.since),
+    )
+    print(_format_sync_result("Synchronized project memory for", result))
     return 0
 
 
@@ -379,7 +500,7 @@ def _cmd_auto_init(args: argparse.Namespace) -> int:
         return 0
 
     try:
-        result = initialize_project(
+        result = sync_project(
             repo_root=repo_root,
             seed_claude=True,
             include_subagents=True,
@@ -406,21 +527,37 @@ def _cmd_setup_hooks(_: argparse.Namespace) -> int:
     script = bin_dir / "engram-auto-init.sh"
     script.write_text(AUTOINIT_SHELL_SCRIPT, encoding="utf-8")
     script.chmod(script.stat().st_mode | stat.S_IEXEC)
+    script = script.resolve()
 
     settings_path = config.home_dir() / ".claude" / "settings.json"
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     if settings_path.exists():
-        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        try:
+            settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{settings_path} is not valid JSON: {exc.msg}") from exc
     else:
         settings = {}
 
     hooks = settings.setdefault("hooks", {})
+    if not isinstance(hooks, dict):
+        raise ValueError(f"{settings_path} has a non-object 'hooks' value")
     session_start = hooks.setdefault("SessionStart", [])
+    if not isinstance(session_start, list):
+        raise ValueError(f"{settings_path} has a non-list hooks.SessionStart value")
     hook_command = f"bash {script}"
     if not any(entry.get("command") == hook_command for entry in session_start if isinstance(entry, dict)):
         session_start.append({"matcher": "", "command": hook_command})
 
-    settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        dir=str(settings_path.parent),
+        delete=False,
+    ) as tmp:
+        tmp.write(json.dumps(settings, indent=2) + "\n")
+        tmp_path = Path(tmp.name)
+    tmp_path.replace(settings_path)
     print(f"Wrote hook script: {script}")
     print(f"Updated settings:  {settings_path}")
     return 0
@@ -491,6 +628,13 @@ def build_parser() -> argparse.ArgumentParser:
     init_cmd.add_argument("--since", default="180d", help="Import Claude sessions newer than this window, e.g. 90d")
     init_cmd.set_defaults(func=_cmd_init)
 
+    sync_cmd = subparsers.add_parser("sync", help="Refresh repo docs, rules, summaries, and optional Claude imports")
+    sync_cmd.add_argument("repo", nargs="?", help="Repository root path (default: current repo or cwd)")
+    sync_cmd.add_argument("--skip-claude", action="store_true", help="Skip Claude archive import during sync")
+    sync_cmd.add_argument("--include-subagents", action="store_true", help="Include Claude subagent sessions")
+    sync_cmd.add_argument("--since", default="180d", help="Import Claude sessions newer than this window, e.g. 90d")
+    sync_cmd.set_defaults(func=_cmd_sync)
+
     project = subparsers.add_parser("project", help="Inspect initialized projects")
     project_subparsers = project.add_subparsers(dest="project_command", required=True)
     project_show = project_subparsers.add_parser("show", help="Show project stats and summaries")
@@ -518,6 +662,27 @@ def build_parser() -> argparse.ArgumentParser:
     memory_search.add_argument("--limit", type=int, default=10, help="Maximum results")
     memory_search.add_argument("--json", action="store_true", help="Emit JSON")
     memory_search.set_defaults(func=_cmd_memory_search)
+
+    memory_list = memory_subparsers.add_parser("list", help="List stored project memory")
+    memory_list.add_argument("--repo", help="Optional repository root override")
+    memory_list.add_argument("--kind", help="Optional memory kind filter")
+    memory_list.add_argument("--json", action="store_true", help="Emit JSON")
+    memory_list.set_defaults(func=_cmd_memory_list)
+
+    memory_store = memory_subparsers.add_parser("store", help="Store a memory item for a project")
+    memory_store.add_argument("kind", help="Memory kind, e.g. note, preference, lesson")
+    memory_store.add_argument("title", help="Short memory title")
+    memory_store.add_argument("body", help="Memory body")
+    memory_store.add_argument("--repo", help="Optional repository root override")
+    memory_store.add_argument("--source-context", help="Optional source context or excerpt")
+    memory_store.add_argument("--json", action="store_true", help="Emit JSON")
+    memory_store.set_defaults(func=_cmd_memory_store)
+
+    memory_delete = memory_subparsers.add_parser("delete", help="Delete a stored memory item by ID")
+    memory_delete.add_argument("memory_id", type=int, help="Memory item ID")
+    memory_delete.add_argument("--repo", help="Optional repository root override")
+    memory_delete.add_argument("--json", action="store_true", help="Emit JSON")
+    memory_delete.set_defaults(func=_cmd_memory_delete)
 
     docs = subparsers.add_parser("docs", help="Search indexed repository documents")
     docs_subparsers = docs.add_subparsers(dest="docs_command", required=True)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 import sqlite3
 from pathlib import Path
@@ -8,7 +9,7 @@ from typing import Any
 from engram import config
 from engram.db import Database
 from engram.errors import ProjectNotInitializedError
-from engram.rules import load_applicable_rules
+from engram.rules import load_applicable_rules, scope_priority
 
 
 def _repo_root(repo_root: Path) -> Path:
@@ -107,6 +108,7 @@ def get_project_snapshot(db: Database, repo_root: Path) -> dict[str, Any]:
             "language_summary": project["language_summary"],
             "created_at": project["created_at"],
             "updated_at": project["updated_at"],
+            "last_synced_at": project["updated_at"],
         },
         "stats": stats,
         "summaries": {
@@ -169,6 +171,95 @@ def search_memory(
         "query": query,
         "kind": kind,
         "results": [_memory_row_to_dict(db, row) for row in rows],
+    }
+
+
+def list_memory(
+    db: Database,
+    repo_root: Path,
+    kind: str | None = None,
+) -> dict[str, Any]:
+    repo_root = _repo_root(repo_root)
+    project = _load_project_or_raise(db, repo_root)
+    rows = db.list_memory_items(int(project["id"]), kind=kind)
+    return {
+        "project_id": int(project["id"]),
+        "repo_root": str(repo_root),
+        "kind": kind,
+        "results": [_memory_row_to_dict(db, row) for row in rows],
+    }
+
+
+def store_memory(
+    db: Database,
+    repo_root: Path,
+    kind: str,
+    title: str,
+    body: str,
+    source_context: str | None = None,
+) -> dict[str, Any]:
+    repo_root = _repo_root(repo_root)
+    project = _load_project_or_raise(db, repo_root)
+    project_id = int(project["id"])
+    scope_id = db.ensure_scope(
+        project_id=project_id,
+        scope_type="repo",
+        scope_key=str(repo_root),
+        priority=scope_priority("repo"),
+    )
+
+    normalized_title = " ".join(title.split()).strip()
+    normalized_body = body.strip()
+    normalized_kind = kind.strip()
+    if not normalized_kind:
+        raise ValueError("kind is required")
+    if not normalized_title:
+        raise ValueError("title is required")
+    if not normalized_body:
+        raise ValueError("body is required")
+
+    source_key = hashlib.sha1(
+        f"{normalized_kind}\n{normalized_title}\n{normalized_body}".encode("utf-8")
+    ).hexdigest()
+    memory_id = db.upsert_memory_item(
+        project_id=project_id,
+        scope_id=scope_id,
+        kind=normalized_kind,
+        title=normalized_title[:80],
+        body=normalized_body[:2000],
+        source_key=f"manual:{source_key}",
+        confidence=0.8,
+        importance=0.7,
+        stability=0.6,
+    )
+    db.replace_memory_provenance(
+        memory_id,
+        [(None, None, None, source_context[:500])] if source_context else [],
+    )
+    row = db.get_memory_item(project_id, memory_id)
+    if row is None:
+        raise ValueError(f"failed to load stored memory {memory_id}")
+    return {
+        "project_id": project_id,
+        "repo_root": str(repo_root),
+        "stored": True,
+        "memory": _memory_row_to_dict(db, row),
+    }
+
+
+def delete_memory(
+    db: Database,
+    repo_root: Path,
+    memory_id: int,
+) -> dict[str, Any]:
+    repo_root = _repo_root(repo_root)
+    project = _load_project_or_raise(db, repo_root)
+    deleted = db.delete_memory_item(int(project["id"]), memory_id)
+    return {
+        "project_id": int(project["id"]),
+        "repo_root": str(repo_root),
+        "memory_id": memory_id,
+        "deleted": deleted,
     }
 
 

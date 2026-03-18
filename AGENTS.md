@@ -11,15 +11,17 @@ Run commands from the repo root:
 ```bash
 PYTHONPATH=src python3 -m engram doctor
 PYTHONPATH=src python3 -m engram init /path/to/repo --seed-claude
+PYTHONPATH=src python3 -m engram sync /path/to/repo
 PYTHONPATH=src python3 -m engram auto-init /path/to/repo
 PYTHONPATH=src python3 -m engram setup-hooks
 PYTHONPATH=src python3 -m engram docs search /path/to/repo onboarding
+PYTHONPATH=src python3 -m engram memory store note "Sync Workflow" "Run engram sync before coding sessions." --repo /path/to/repo
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 python3 scripts/build_dist.py
 python3 scripts/render_homebrew_formula.py --owner <owner> --repo <repo>
 ```
 
-`doctor` validates local dependencies, `init` bootstraps repo memory, `auto-init` provides idempotent first-run setup, `setup-hooks` installs the Claude SessionStart hook, `docs search` exercises direct document retrieval, the `unittest` command is the main test entrypoint, and `build_dist.py` creates release artifacts. Most read-oriented commands can infer the repo from the current working tree when run inside a repository.
+`doctor` validates local dependencies, `init` bootstraps repo memory, `sync` refreshes indexed state, `auto-init` provides idempotent first-run setup, `setup-hooks` installs the Claude SessionStart hook, `docs search` exercises direct document retrieval, `memory store` exercises write-side memory management, the `unittest` command is the main test entrypoint, and `build_dist.py` creates release artifacts. Most read-oriented commands can infer the repo from the current working tree when run inside a repository.
 
 ## Coding Style & Naming Conventions
 
@@ -27,7 +29,7 @@ Use 4-space indentation and LF line endings as defined in `.editorconfig`. Keep 
 
 ## Testing Guidelines
 
-Use `unittest` with files named `test_<module>.py`. Add or update tests for any change that touches CLI behavior, database migrations, rule resolution, document retrieval, initialization flow, or Claude import logic. There is no formal coverage gate yet, but new logic should ship with a direct test and at least one realistic path-level assertion where practical.
+Use `unittest` with files named `test_<module>.py`. Add or update tests for any change that touches CLI behavior, database migrations, rule resolution, document retrieval, initialization flow, MCP tools, memory management, or Claude import logic. There is no formal coverage gate yet, but new logic should ship with a direct test and at least one realistic path-level assertion where practical.
 
 ## Commit & Pull Request Guidelines
 

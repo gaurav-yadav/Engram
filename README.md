@@ -6,11 +6,13 @@ Current scope:
 
 - `doctor` validates local runtime requirements
 - `init` bootstraps a repo, creates local state, indexes docs and rules, optionally imports Claude chats, and writes summaries
+- `sync` refreshes repo docs, rules, summaries, and optional Claude imports
 - `auto-init` provides idempotent first-run setup for hooks and unattended sessions
 - `setup-hooks` installs a Claude SessionStart hook that triggers `auto-init`
 - `project show` reports project stats and summaries
 - `rules show` resolves deterministic scoped rules
 - `memory search` searches distilled memory with provenance
+- `memory list` / `memory store` / `memory delete` manage stored project memory
 - `docs search` searches indexed READMEs, manifests, and rules directly
 - `context` assembles summary, rules, memory, and docs for a coding query
 - `mcp` serves the same retrieval surface over stdio JSON-RPC
@@ -28,11 +30,13 @@ Current scope:
 cd Engram
 PYTHONPATH=src python3 -m engram doctor
 PYTHONPATH=src python3 -m engram init /path/to/repo --seed-claude --include-subagents --since 180d
+PYTHONPATH=src python3 -m engram sync /path/to/repo
 PYTHONPATH=src python3 -m engram auto-init /path/to/repo
 PYTHONPATH=src python3 -m engram setup-hooks
 PYTHONPATH=src python3 -m engram project show /path/to/repo
 PYTHONPATH=src python3 -m engram rules show /path/to/repo --path src/app.py --agent reviewer
 PYTHONPATH=src python3 -m engram memory search /path/to/repo pytest --kind command
+PYTHONPATH=src python3 -m engram memory store note "Sync Workflow" "Run engram sync before coding sessions." --repo /path/to/repo
 PYTHONPATH=src python3 -m engram docs search /path/to/repo onboarding
 PYTHONPATH=src python3 -m engram context /path/to/repo "failing tests in ingestion"
 PYTHONPATH=src python3 -m engram mcp
@@ -83,6 +87,12 @@ Bootstrap a repository:
 engram init /path/to/repo --seed-claude --include-subagents --since 180d
 ```
 
+Refresh a repository later:
+
+```bash
+engram sync /path/to/repo
+```
+
 That creates:
 
 - global state under `~/.engram`
@@ -105,8 +115,11 @@ Inspect a bootstrapped project:
 
 ```bash
 engram project show /path/to/repo
+engram sync /path/to/repo
 engram rules show /path/to/repo --path src/app.py --agent reviewer
 engram memory search /path/to/repo pytest --kind command
+engram memory list --repo /path/to/repo
+engram memory store note "Sync Workflow" "Run engram sync before coding sessions." --repo /path/to/repo
 engram docs search /path/to/repo onboarding
 engram context /path/to/repo "failing ingestion tests"
 ```
@@ -117,6 +130,7 @@ Most read-oriented commands can infer the repository from the current working tr
 engram project show
 engram docs search onboarding
 engram context "failing ingestion tests"
+engram memory list
 ```
 
 Run the MCP server for Claude/Codex-style clients:

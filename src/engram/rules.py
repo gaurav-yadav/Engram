@@ -16,7 +16,9 @@ SCOPE_ORDER = {
 
 
 def scope_priority(scope_type: str) -> int:
-    return SCOPE_ORDER.get(scope_type, 0)
+    if scope_type not in SCOPE_ORDER:
+        raise ValueError(f"unknown scope_type: {scope_type}")
+    return SCOPE_ORDER[scope_type]
 
 
 def resolve_path_scope(repo_root: Path, target_path: Path | None) -> str | None:
